@@ -28,7 +28,7 @@ git remote add origin git@github.com:juan-belda-hgue/symfony-security.git
 git push -u origin main
 ```
 
-…or push an existing repository from the command line
+## …or push an existing repository from the command line
 
 ```shell
 git remote add origin git@github.com:juan-belda-hgue/symfony-security.git
