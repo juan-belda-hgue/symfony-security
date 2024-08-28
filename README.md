@@ -43,3 +43,28 @@ Instala el paquete de seguridad
 ```Shell
 composer require symfony/security-bundle
 ```
+
+Además de las cosas normales, ha añadido dos nuevos archivos de configuración:
+
+- config/packages/security.yaml
+- config/routes/security.yaml
+
+Independientemente de cómo se autentifiquen tus usuarios -un formulario de inicio de sesión, una autenticación social o una clave de la API-, tu sistema de seguridad necesita algún concepto de usuario: alguna clase que describa la "cosa" que ha iniciado la sesión.
+
+Sí, el paso 1 de la autenticación es crear una clase User. ¡Y hay un comando que puede ayudarnos! Busca tu terminal y ejecuta:
+
+```Shell
+symfony console make:user
+```
+
+o
+
+```Shell
+php bin/console make:user
+```
+
+Si no nos funciona necesitamos instalar:
+
+```Shell
+composer require symfony/maker-bundle --dev
+```
