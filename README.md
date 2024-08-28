@@ -35,3 +35,11 @@ git remote add origin git@github.com:juan-belda-hgue/symfony-security.git
 git branch -M main
 git push -u origin main
 ```
+
+## Instalando seguridad
+
+Instala el paquete de seguridad
+
+```Shell
+composer require symfony/security-bundle
+```
