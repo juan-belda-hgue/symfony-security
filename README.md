@@ -68,3 +68,23 @@ Si no nos funciona necesitamos instalar:
 ```Shell
 composer require symfony/maker-bundle --dev
 ```
+
+```Shell
+C:\Users\33484234y\Documents\Proyectos\symfony\symfony-security>php bin/console make:user
+
+ The name of the security user class (e.g. User) [User]:
+ > Profesional
+
+ Do you want to store user data in the database (via Doctrine)? (yes/no) [no]:
+ > yes
+
+
+ [ERROR] Missing package: Doctrine must be installed to store user data in the database, run:
+
+         composer require symfony/orm-pack
+```
+
+Instrucciones después de la instalación de doctrine/doctrine-bundle:
+
+- Modifica la configuración de **DATABASE_URL** en `.env`
+- Configura el **driver** (postgresql) y la versión **server_version** (16) en `config/packages/doctrine.yaml`
