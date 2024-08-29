@@ -163,3 +163,84 @@ Así que si la petición actual es un POST a /login, queremos intentar autentifi
 
 Para ver lo que ocurre a continuación, baja en `authenticate()`, `dd('authenticate')`:
 
+### composer require --dev symfony/profiler-pack
+
+Instalamos el paquete para poder ver la barra de depuración.
+
+## El método authenticate()
+
+Así que si supports() devuelve true, Symfony llama a authenticate(). Este es el corazón de nuestro autentificador... y su trabajo es comunicar dos cosas importantes. En primer lugar, quién es el usuario que está intentando iniciar sesión -en concreto, qué objeto **User** es- y, en segundo lugar, alguna prueba de que es ese usuario. En el caso de un formulario de acceso, eso sería una contraseña. Como nuestros usuarios aún no tienen contraseña, la falsificaremos temporalmente.
+
+### El objeto Pasaporte: UserBadge y Credenciales
+
+Comunicamos estas dos cosas devolviendo un objeto Passport: return newPassport():
+
+Este simple objeto es básicamente un contenedor de cosas llamadas "insignias"... donde una insignia es un pequeño trozo de información que va en el pasaporte. Las dos insignias más importantes son UserBadge y una especie de "insignia de credenciales" que ayuda a demostrar que este usuario es quien dice ser.
+
+Empieza por coger el nif y la contraseña que te han enviado: `$nif = $request->request->get('_username')`. Si no lo has visto antes, `$request->request->get()` es la forma de leer los datos de POST en Symfony. En la plantilla de inicio de sesión, el nombre del campo es `_username`... así que leemos el campo POST _username. Copia y pega esta línea para crear una variable $password que lea el campo `_password` del formulario:
+
+```php
+    public function authenticate(Request $request): Passport
+    {
+        $nif = $request->request->get('_username');
+        $password = $request->request->get('_password');
+```
+
+A continuación, dentro del `Passport`, el primer argumento es siempre el `UserBadge`. Di `new UserBadge()` y pásale nuestro "identificador de usuario". Para nosotros, ese es el $nif:
+
+```php
+    public function authenticate(Request $request): Passport
+    {
+        $nif = $request->request->get('_username');
+        $password = $request->request->get('_password');
+        return new Passport(
+            new UserBadge($nif),
+```
+
+El segundo argumento de `Passport` es una especie de "credencial". Eventualmente le pasaremos un `PasswordCredentials()`..., pero como nuestros usuarios aún no tienen contraseñas, utiliza un nuevo `CustomCredentials()`. Pásale una devolución de llamada con un argumento `$credentials` y un argumento `$user` de tipo-indicado con nuestra clase Profesional:
+
+```php
+    public function authenticate(Request $request): Passport
+    {
+        $nif = $request->request->get('_username');
+        $password = $request->request->get('_password');
+        return new Passport(
+            new UserBadge($nif),
+            new CustomCredentials(function($credentials, Profesional $profesional) {
+                   dd($credentials, $profesional);
+            }, $password)
+        );
+    }
+```
+
+Symfony ejecutará nuestra llamada de retorno y nos permitirá "comprobar las credenciales" de este usuario de forma manual..., sea lo que sea que eso signifique en nuestra aplicación. Para empezar, `dd($credentials, $profesional)`. Ah, y `CustomCredentials` necesita un segundo argumento, que es cualquiera de nuestras "credenciales". Para nosotros, eso es $password.
+
+Si esto de `CustomCredentials` es un poco confuso, no te preocupes: realmente tenemos que ver esto en acción.
+
+Pero en un nivel alto..., es algo genial. Devolvemos un objeto `Passport`, que dice quién es el usuario -identificado por su nif - y una especie de "proceso de credenciales" que probará que el usuario es quien dice ser.
+
+Bien: con sólo esto, vamos a probarlo. Vuelve al formulario de acceso y vuelve a enviarlo. Recuerda: hemos rellenado el formulario con un NIF que sí existe en nuestra base de datos.
+
+Y... ¡impresionante! *1234* es lo que envié para mi contraseña y también está volcando el objeto de entidad Profesional correcto de la base de datos! Así que... ¡oh! De alguna manera, supo consultar el objeto Profesional utilizando ese nif. ¿Cómo funciona eso?
+
+La respuesta es **el proveedor de usuarios**. Vamos a sumergirnos en eso a continuación, para saber cómo podemos hacer una consulta personalizada para nuestro usuario y terminar el proceso de autenticación.
+
+## 07. Consulta de usuario personalizada y credenciales
+
+### UserBadge y el proveedor de usuarios
+
+Así es como funciona esto. Después de que devolvamos el objeto `Passport`, el sistema de seguridad intenta encontrar el objeto `Profesional` a partir de `UserBadge`. Si sólo le pasas un argumento a `UserBadge` -como es nuestro caso-, lo hace aprovechando nuestro **proveedor de usuarios**. ¿Recuerdas esa cosa de `security.yaml` llamada `providers`?
+
+```yaml
+security:
+    providers:
+        # used to reload user from session & other features (e.g. switch_user)
+        app_user_provider:
+            entity:
+                class: App\Entity\Profesional
+                property: nif
+```
+
+Como nuestra clase Profesional es una entidad, estamos utilizando el proveedor **entity** que sabe cómo cargar usuarios utilizando la propiedad **nif**. Así que, básicamente, se trata de un objeto que es muy bueno para consultar la tabla de profesionales a través de la propiedad nif. Así que cuando pasamos sólo el nif a **UserBadge**, el proveedor de usuarios lo utiliza para consultar **Profesional**.
+
+Si se encuentra un objeto **Profesional**, Symfony intenta entonces "comprobar las credenciales" de nuestro pasaporte. Como estamos utilizando **CustomCredentials**, esto significa que ejecuta esta llamada de retorno..., en la que volcamos algunos datos. Si no se encuentra un **Profesional** - porque hemos introducido un **nif** que no está en la base de datos - la autenticación falla. Pronto veremos más sobre estas dos situaciones.

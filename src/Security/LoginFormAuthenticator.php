@@ -2,6 +2,7 @@
 
 namespace App\Security;
 
+use App\Entity\Profesional;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -10,6 +11,7 @@ use Symfony\Component\Security\Core\Exception\AuthenticationException;
 use Symfony\Component\Security\Core\Exception\CustomUserMessageAuthenticationException;
 use Symfony\Component\Security\Http\Authenticator\AbstractAuthenticator;
 use Symfony\Component\Security\Http\Authenticator\Passport\Badge\UserBadge;
+use Symfony\Component\Security\Http\Authenticator\Passport\Credentials\CustomCredentials;
 use Symfony\Component\Security\Http\Authenticator\Passport\Passport;
 use Symfony\Component\Security\Http\Authenticator\Passport\SelfValidatingPassport;
 
@@ -30,7 +32,16 @@ class LoginFormAuthenticator extends AbstractAuthenticator
 
     public function authenticate(Request $request): Passport
     {
-        dd('authenticate!');
+        $nif = $request->request->get('_username');
+        $password = $request->request->get('_password');
+
+        return new Passport(
+            new UserBadge($nif),
+            new CustomCredentials(function ($credentials, Profesional $profesional) {
+                dd($credentials, $profesional);
+            }, $password)
+        );
+
         // $apiToken = $request->headers->get('X-AUTH-TOKEN');
         // if (null === $apiToken) {
         // The token header was empty, authentication fails with HTTP Status
