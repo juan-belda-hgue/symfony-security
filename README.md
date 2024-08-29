@@ -102,7 +102,7 @@ Nos sale un asistente para crear la Entidad de tipo *user*, que se usará para l
 
 ## symfony console make:entity
 
-Para añadir más campos a la Entidad anterior que hemos creado tipo **user**, ahora llamamos a este _maker_ y en el asistente introducimos el mismo nombre de Entidad con lo que añadirá los campos que necesitemos.
+Para añadir más campos a la Entidad anterior que hemos creado tipo **user**, ahora llamamos a este *maker* y en el asistente introducimos el mismo nombre de Entidad con lo que añadirá los campos que necesitemos.
 
 ## symfony console make:migration --formatted
 
@@ -127,4 +127,39 @@ Este asistente agiliza la creación de lo necesario para la seguridad.
 ## composer require twig
 
 Instalamos el sistema de plantillas Twig.
+
+## symfony console make:security:custom
+
+Cada vez que queramos autentificar al usuario -como cuando enviamos un formulario de acceso- necesitamos un autentificador. Hay algunas clases de autentificadores principales que podemos utilizar, incluida una para los formularios de inicio de sesión... Pero para empezar, vamos a construir nuestra propia clase de autentificador desde cero.
+
+Creamos la clase `LoginFormAuthenticator.php` y actualizamos `security.yaml`.
+
+El autentificador se ha activado al añadir `custom_authenticator: App\Security\LoginFormAuthenticator` en security.yaml. Puedes tener varios autentificadores personalizados si quieres.
+
+Si vas a cualquier URL, se encontrará con nuestro `supports()`. En cada petición, antes del controlador, Symfony pregunta ahora a nuestro autentificador si soporta la autentificación en esta petición.
+
+## La seguridad de Symfony no ocurre en un controlador
+
+Lo raro del sistema de seguridad de Symfony es que... no vamos a escribir esta lógica en el controlador. No. Cuando hagamos un POST a /login, nuestro autentificador va a interceptar esa petición y hará todo el trabajo por sí mismo. Sí, cuando enviemos el formulario de inicio de sesión, nuestro controlador en realidad nunca se ejecutará.
+
+### El método supports()
+
+Ahora que nuestro autentificador está activado, al inicio de cada petición, Symfony llamará al método `supports()` de nuestra clase. Nuestro trabajo es devolver **true** si esta petición "contiene información de autenticación que sabemos procesar". Si no, devolvemos false. Si devolvemos false, no fallamos en la autenticación: sólo significa que nuestro autenticador no sabe cómo autenticar esta petición... y la petición continúa procesándose con normalidad... ejecutando cualquier controlador con el que coincida.
+
+Así que pensemos: ¿cuándo queremos que nuestro autenticador "haga su trabajo"? ¿Qué peticiones "contienen información de autenticación que sabemos procesar"? La respuesta es: siempre que el usuario envíe el formulario de inicio de sesión.
+
+Dentro de `supports()` devuelve true si `$request->getPathInfo()` -es un método elegante para obtener la URL actual- es igual a `/login` y si `$request->isMethod('POST')`:
+
+```php
+class LoginFormAuthenticator extends AbstractAuthenticator
+{
+    public function supports(Request $request): ?bool
+    {
+        return ($request->getPathInfo() === '/login' && $request->isMethod('POST'));
+    }
+```
+
+Así que si la petición actual es un POST a /login, queremos intentar autentificar al usuario. Si no, queremos permitir que la petición continúe de forma normal.
+
+Para ver lo que ocurre a continuación, baja en `authenticate()`, `dd('authenticate')`:
 
