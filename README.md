@@ -88,3 +88,22 @@ Instrucciones después de la instalación de doctrine/doctrine-bundle:
 
 - Modifica la configuración de **DATABASE_URL** en `.env`
 - Configura el **driver** (postgresql) y la versión **server_version** (16) en `config/packages/doctrine.yaml`
+
+## Reglas para los nombres
+
+1. Los nombre de tabla son en singular, por ejemplo, **profesional** en lugar de profesionales.
+2. Los nombres de las entidades son Clases y por eso empiezan en mayúscula, por ejemplo, **Profesional**.
+3. Los nombres de los campos de las entidades/tablas son siempre en minúsculas y si se necesita dos palabras se usa el guión bajo **_**, por ejemplo, **fecha_nacimiento**. Los métodos en PHP que se generan para estas propiedades, entiende esta nomenglatura y serán `getFechaNacimiento()` o `setFechaNacimiento()`.
+4. Evitar abreviaturas, por ejemplo, **localidad_nacimiento** en lugar de localidad_nac.
+
+## symfony console make:user
+
+Nos sale un asistente para crear la Entidad de tipo *user*, que se usará para la identificación.
+
+## symfony console make:entity
+
+Para añadir más campos a la Entidad anterior que hemos creado tipo **user**, ahora llamamos a este _maker_ y en el asistente introducimos el mismo nombre de Entidad con lo que añadirá los campos que necesitemos.
+
+## symfony console make:migration
+
+Generar la migración es crear las sentencias SQL sin ejecutarlas.
