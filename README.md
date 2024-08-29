@@ -104,7 +104,7 @@ Nos sale un asistente para crear la Entidad de tipo *user*, que se usará para l
 
 Para añadir más campos a la Entidad anterior que hemos creado tipo **user**, ahora llamamos a este _maker_ y en el asistente introducimos el mismo nombre de Entidad con lo que añadirá los campos que necesitemos.
 
-## symfony console make:migration
+## symfony console make:migration --formatted
 
 Generar la migración es crear las sentencias SQL sin ejecutarlas.
 
@@ -113,3 +113,7 @@ Se crea la carpeta **migrations** y dentro el archivo php.
 ## symfony console doctrine:migrations:migrate
 
 Ejecutamos la migración pendiente.
+
+## symfony console make:auth
+
+Este asistente agiliza la creación de lo necesario para la seguridad.
