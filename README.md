@@ -107,3 +107,9 @@ Para añadir más campos a la Entidad anterior que hemos creado tipo **user**, a
 ## symfony console make:migration
 
 Generar la migración es crear las sentencias SQL sin ejecutarlas.
+
+Se crea la carpeta **migrations** y dentro el archivo php.
+
+## symfony console doctrine:migrations:migrate
+
+Ejecutamos la migración pendiente.
