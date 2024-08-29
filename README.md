@@ -114,6 +114,16 @@ Se crea la carpeta **migrations** y dentro el archivo php.
 
 Ejecutamos la migración pendiente.
 
-## symfony console make:auth
+## make:security:form-login ~~symfony console make:auth~~
 
 Este asistente agiliza la creación de lo necesario para la seguridad.
+
+```Shell
+[ERROR] Missing package: to use the make:security:form-login command, run:
+
+   composer require twig
+```
+
+## composer require twig
+
+Instalamos el sistema de plantillas Twig.
