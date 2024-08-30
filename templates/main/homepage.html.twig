@@ -1,0 +1,12 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Página inicio{% endblock %}
+
+{% block body %}
+    {% if app.user %}
+        <div class="mb-3">
+            Identificado como {{ app.user.userIdentifier }}, <a href="{{ path('app_logout') }}">Salir</a>
+        </div>
+    {% endif %}
+    <h1>Página de inicio de SEGURIDAD</h1>
+{% endblock %}

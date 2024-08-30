@@ -195,7 +195,7 @@ Así que si supports() devuelve true, Symfony llama a authenticate(). Este es el
 
 Comunicamos estas dos cosas devolviendo un objeto Passport: return newPassport():
 
-Este simple objeto es básicamente un contenedor de cosas llamadas "insignias"... donde una insignia es un pequeño trozo de información que va en el pasaporte. Las dos insignias más importantes son UserBadge y una especie de "insignia de credenciales" que ayuda a demostrar que este usuario es quien dice ser.
+Este simple objeto es básicamente un contenedor de cosas llamadas "insignias"..., donde una insignia es un pequeño trozo de información que va en el pasaporte. Las dos insignias más importantes son `UserBadge` y una especie de "insignia de credenciales" que ayuda a demostrar que este usuario es quien dice ser.
 
 Empieza por coger el nif y la contraseña que te han enviado: `$nif = $request->request->get('_username')`. Si no lo has visto antes, `$request->request->get()` es la forma de leer los datos de POST en Symfony. En la plantilla de inicio de sesión, el nombre del campo es `_username`... así que leemos el campo POST _username. Copia y pega esta línea para crear una variable $password que lea el campo `_password` del formulario:
 
@@ -562,3 +562,69 @@ Ah, y por cierto: después de consultar los datos frescos de `Profesional`, si a
 Averigüemos qué ocurre cuando falla la autenticación. ¿Dónde va el usuario? ¿Cómo se muestran los errores? ¿Cómo vamos a tratar la carga emocional del fracaso? La mayor parte de eso es lo siguiente.
 
 ## 09. Cuando falla la autenticación
+
+Vuelve al formulario de inicio de sesión. ¿Qué ocurre si falla el inicio de sesión? En este momento, hay dos formas de fallar:
+
+- si no podemos encontrar un Profesional para el nif
+- o si la contraseña es incorrecta. Probemos primero con una contraseña incorrecta.
+
+### onAuthenticationFailure & AuthenticationException
+
+Introduce un nif real de la base de datos..., y luego cualquier contraseña que no sea "Aa_123456". Y..., ¡sí! Nos encontramos con el `dd()`..., que viene de `onAuthenticationFailure()`:
+
+Así que, independientemente de cómo fallemos la autenticación, acabamos aquí, y se nos pasa un argumento `$exception`. También vamos a mostrar eso:
+
+```php
+ public function onAuthenticationFailure(Request $request, AuthenticationException $exception): ?Response
+{
+   dd('failure', $exception);
+}
+```
+
+Vuelve... y actualiza. ¡Genial! Es un `BadCredentialsException`.
+
+Esto es genial. Si la autenticación falla -no importa cómo falle- vamos a acabar aquí con algún tipo de `AuthenticationException`. `BadCredentialsException` es una subclase de ese..., al igual que el `UserNotFoundException` que estamos lanzando desde nuestro callback del cargador de usuarios.
+
+Todas estas clases de excepción tienen algo importante en común. Mantén pulsado Command o Ctrl para abrir `UserNotFoundException` y verlo. Todas estas excepciones de autenticación tienen un método especial `getMessageKey()` que contiene una explicación segura de por qué ha fallado la autenticación. Podemos utilizarlo para informar al usuario de lo que ha ido mal.
+
+### hide_user_not_found: Mostrar errores de nombre de usuario/nif no válidos
+
+Así que esto es lo más importante: cuando la autenticación falla, es porque algo ha lanzado un `AuthenticationException` o una de sus subclases. Y así, como estamos lanzando un `UserNotFoundException` cuando se introduce un nif..., si intentamos iniciar la sesión con un nif incorrecto, esa excepción debería pasarse a `onAuthenticationFailure()`.
+
+Vamos a probar esa teoría. En el formulario de inicio de sesión, introduce un nif y envía. ¡Ah! Seguimos obteniendo un `BadCredentialsException`! Esperaba que ésta fuera la verdadera excepción lanzada: la `UserNotFoundException`.
+
+En la mayoría de los casos..., así es como funciona. Si lanzas un `AuthenticationException` durante el proceso de autentificación, esa excepción se te pasa a `onAuthenticationFailure()`. Entonces puedes utilizarla para averiguar qué ha ido mal. Sin embargo, `UserNotFoundException` es un caso especial. En algunos sitios, cuando el usuario introduce un **nif** válido pero una contraseña incorrecta, puede que no quieras decirle al usuario que, de hecho, se encontró el **nif**. Así que dices "Credenciales no válidas" tanto si no se encontró el nif como si la contraseña era incorrecta.
+
+Este problema se llama enumeración de usuarios: es cuando alguien puede probar los nif en tu formulario de acceso para averiguar qué personas tienen cuentas y cuáles no. Para algunos sitios, definitivamente no quieres exponer esa información.
+
+Por eso, para estar seguros, Symfony convierte `UserNotFoundException` en un `BadCredentialsException` para que introducir un nif o una contraseña no válidos dé el mismo mensaje de error. Sin embargo, si quieres poder decir "nif no válido" -lo que es mucho más útil para tus usuarios- puedes hacer lo siguiente
+
+Abre `config/packages/security.yaml`. Y, en cualquier lugar bajo la clave raíz `security`, añade una opción `hide_user_not_found` establecida como `false`:
+
+```yaml
+security:
+   hide_user_not_found: false
+```
+
+Esto le dice a Symfony que no convierta `UserNotFoundException` en un `BadCredentialsException`.
+
+Si refrescamos ahora... ¡boom! Nuestro `UserNotFoundException` se pasa ahora directamente a `onAuthenticationFailure()`.
+
+### Almacenamiento del error de autenticación en la sesión
+
+Bien, pensemos. En `onAuthenticationFailure()`..., ¿qué queremos hacer? Nuestro trabajo en este método es, como puedes ver, devolver un objeto `Response`. Para un formulario de inicio de sesión, lo que probablemente queramos hacer es redirigir al usuario de vuelta a la página de inicio de sesión, pero mostrando un error.
+
+Para poder hacerlo, vamos a guardar esta excepción -que contiene el mensaje de error- en la sesión. Digamos `$request->getSession()->set()`. En realidad podemos utilizar la clave que queramos..., pero hay una clave estándar que se utiliza para almacenar los errores de autenticación. Puedes leerla desde una constante: - la del componente de seguridad de Symfony - `SecurityRequestAttributes::AUTHENTICATION_ERROR`. Pasa `$exception` al segundo argumento:
+
+```php
+class LoginFormAuthenticator extends AbstractAuthenticator
+{
+    public function onAuthenticationFailure(Request $request, AuthenticationException $exception): ?Response
+    {
+        // DEPRECATED $request->getSession()->set(Security::AUTHENTICATION_ERROR, $exception);
+        $request->getSession()->set(SecurityRequestAttributes::AUTHENTICATION_ERROR, $exception);
+    }
+}
+```
+
+Ahora que el error está en la sesión, vamos a redirigirnos a la página de inicio de sesión. Haré trampa y copiaré el `RedirectResponse` de antes... y cambiaré la ruta a `app_login`:
