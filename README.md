@@ -244,3 +244,83 @@ security:
 Como nuestra clase Profesional es una entidad, estamos utilizando el proveedor **entity** que sabe cómo cargar usuarios utilizando la propiedad **nif**. Así que, básicamente, se trata de un objeto que es muy bueno para consultar la tabla de profesionales a través de la propiedad nif. Así que cuando pasamos sólo el nif a **UserBadge**, el proveedor de usuarios lo utiliza para consultar **Profesional**.
 
 Si se encuentra un objeto **Profesional**, Symfony intenta entonces "comprobar las credenciales" de nuestro pasaporte. Como estamos utilizando **CustomCredentials**, esto significa que ejecuta esta llamada de retorno..., en la que volcamos algunos datos. Si no se encuentra un **Profesional** - porque hemos introducido un **nif** que no está en la base de datos - la autenticación falla. Pronto veremos más sobre estas dos situaciones.
+
+### Consulta de usuario personalizada
+
+En cualquier caso, la cuestión es la siguiente: si sólo pasas un argumento a **UserBadge**, el proveedor de usuarios carga el usuario automáticamente. Eso es lo más fácil de hacer. E incluso puedes personalizar un poco esta consulta si lo necesitas - busca "[Usar una consulta personalizada para cargar el usuario](https://bit.ly/sf-entity-provider-query)" en los documentos de Symfony para ver cómo hacerlo.
+
+O..., puedes escribir tu propia lógica personalizada para cargar el usuario aquí mismo. Para ello, vamos a necesitar el **ProfesionalRepository**. En la parte superior de la clase, añade `public function __construct()`... y autoconduce un argumento `ProfesionalRepository`. Pulsaré `Alt+Enter` y seleccionaré "Inicializar propiedades" para crear esa propiedad y establecerla:
+
+```php
+use App\Repository\ProfesionalRepository;
+
+class LoginFormAuthenticator extends AbstractAuthenticator
+{
+    private ProfesionalRepository $profesionalRepository;
+    
+    public function __construct(ProfesionalRepository $profesionalRepository)
+    {
+        $this->profesionalRepository = $profesionalRepository;
+    }
+```
+
+En `authenticate()`, `UserBadge` tiene un segundo argumento opcional llamado cargador de usuario. Pásale una llamada de retorno con un argumento: `$userIdentifier`:
+
+```php
+class LoginFormAuthenticator extends AbstractAuthenticator
+{
+   // ...
+   public function authenticate(Request $request): PassportInterface
+   {
+      // ...
+      return new Passport(
+         new UserBadge($nif, function($userIdentifier) {
+         // ...
+         }),
+      // ...
+      );
+   }
+   // ...
+}
+```
+
+Es bastante sencillo: si le pasas un callable, cuando Symfony cargue tu Profesional, llamará a esta función en lugar de a tu proveedor de usuario. Nuestro trabajo aquí es cargar el usuario y devolverlo. El `$userIdentifier` será lo que hayamos pasado al primer argumento de `UserBadge`... así que el **nif** en nuestro caso.
+
+Digamos que $profesional = $this->profesionalRepository->findOneBy() para consultar nif se ajusta a $userIdentifier:
+
+```php
+class LoginFormAuthenticator extends AbstractAuthenticator
+{
+   // ...
+   public function authenticate(Request $request): PassportInterface
+   {
+      // ...
+      return new Passport(
+         new UserBadge($nif, function($userIdentifier) {
+            // Opcionalmente, pase una devolución de llamada para cargar el profesional manualmente
+            $profesional = $this->profesionalRepository->findOneBy(['nif' => $userIdentifier]);
+            if (!$profesional) {
+               throw new UserNotFoundException();
+            }
+            return $profesional;
+         }),
+      // ...
+      );
+   }
+   // ...
+}
+```
+
+Esto... es básicamente idéntico a lo que hacía nuestro proveedor de usuarios hace un minuto... así que no cambiará nada. Pero puedes ver que tenemos el poder de cargar el Profesional como queramos.
+
+Actualicemos. Sí el mismo volcado que antes.
+
+## Validación de las credenciales
+
+Bien, si se encuentra un objeto Profesional - ya sea desde nuestro callback personalizado o desde el proveedor de usuarios - Symfony comprueba a continuación nuestras credenciales, lo que significa algo diferente dependiendo del objeto de credenciales que pases. Hay 3 principales:
+
+- **PasswordCredentials** - lo veremos más adelante.
+- **SelfValidatingPassport**, que sirve para la autenticación de la API y no necesita ninguna credencial.
+- **CustomCredentials**.
+
+Si usas **CustomCredentials**, Symfony ejecuta la llamada de retorno..., y nuestro trabajo es "comprobar sus credenciales"... sea lo que sea que eso signifique en nuestra aplicación. El argumento `$credentials` coincidirá con lo que hayamos pasado al segundo argumento de `CustomCredentials`. Para nosotros, eso es la contraseña enviada:

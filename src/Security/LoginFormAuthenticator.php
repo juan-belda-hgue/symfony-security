@@ -3,6 +3,7 @@
 namespace App\Security;
 
 use App\Entity\Profesional;
+use App\Repository\ProfesionalRepository;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -20,6 +21,11 @@ use Symfony\Component\Security\Http\Authenticator\Passport\SelfValidatingPasspor
  */
 class LoginFormAuthenticator extends AbstractAuthenticator
 {
+    public function __construct(ProfesionalRepository $profesionalRepository)
+    {
+        $this->profesionalRepository = $profesionalRepository;
+    }
+
     /**
      * Una vez que activemos esta nueva clase en el sistema de seguridad, al principio de cada petición, Symfony llamará a este método supports() y básicamente preguntará
      * ¿Ves información de autenticación en esta petición que entiendas?
