@@ -819,3 +819,195 @@ Bien, vamos a olvidarnos de la seguridad por un momento. En su lugar, céntrate 
 Actualicemos la entidad Profesional, para añadir un nuevo campo llámalo `password`..., que es una cadena, 255 de longitud es exagerado pero está bien..., y luego di "`no`" a anulable. Pulsa `enter` para terminar.
 
 De vuelta a la clase Profesional, es..., mayormente no sorprendente. Tenemos una nueva propiedad `$password`... y al final, un nuevo método `setPassword()`.
+
+Fíjate que no ha generado un método `getPassword()`... porque ya teníamos uno. Pero tenemos que actualizarlo para que devuelva `$this->password`.
+
+Algo muy importante sobre esta propiedad `$password`: **no va a almacenar la contraseña en texto plano**. ¡Nunca almacenes la contraseña en texto plano! Esa es la forma más rápida de tener una brecha de seguridad..., y de perder amigos.
+
+En su lugar, vamos a almacenar una versión cifrada de la contraseña..., y veremos cómo generar esa contraseña cifrada en un minuto. Pero antes, vamos a hacer la migración para la nueva propiedad:
+
+```Shell
+symfony console make:migration --formatted
+
+symfony console doctrine:migrations:migrate
+```
+
+### La configuración de password_hashers
+
+¡Perfecto! Ahora que nuestros usuarios tienen una nueva columna de contraseña en la base de datos, vamos a rellenarla en nuestros accesorios. Abre `src/Factory/UserFactory.php` y busca `getDefaults()`.
+
+De nuevo, lo que no vamos a hacer es poner en password la contraseña en texto plano. No, esa propiedad password tiene que almacenar la versión hash de la contraseña.
+
+Abre `config/packages/security.yaml`. Este tiene un poco de configuración en la parte superior llamada `password_hashers`, que le dice a Symfony qué algoritmo de hash debe utilizar para el hash de las contraseñas de los usuarios:
+
+```yaml
+security:
+   # https://symfony.com/doc/current/security.html#registering-the-user-hashing-passwords
+   password_hashers:
+      Symfony\Component\Security\Core\User\PasswordAuthenticatedUserInterface: "auto"
+```
+
+Esta configuración dice que cualquier clase de User que implemente `PasswordAuthenticatedUserInterface` - lo que nuestra clase, por supuesto, hace - utilizará el algoritmo auto donde Symfony elige el último y mejor algoritmo automáticamente.
+
+### El servicio de aseado de contraseñas
+
+Gracias a esta configuración, tenemos acceso a un servicio "hasher" que es capaz de convertir una contraseña de texto plano en una versión hash utilizando este algoritmo auto. De vuelta a `UserFactory`, podemos utilizarlo para establecer la propiedad password.
+
+En el constructor, añade un nuevo argumento: `UserPasswordHasherInterface $passwordHasher`. Yo le doy a `Alt+Enter` y voy a "Inicializar propiedades" para crear esa propiedad y establecerla:
+
+```php
+// src/Factory/UserFactory.php
+use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
+// ... lines 8 - 29
+final class UserFactory extends ModelFactory
+{
+    private UserPasswordHasherInterface $passwordHasher;
+    public function __construct(UserPasswordHasherInterface $passwordHasher)
+    {
+        parent::__construct();
+        $this->passwordHasher = $passwordHasher;
+    }
+// ... lines 40 - 67
+}
+```
+
+A continuación, podemos establecer password a `$this->passwordHasher->hashPassword()` y luego pasarle alguna cadena de texto plano.
+
+Bueno..., para ser sincero..., aunque espero que esto tenga sentido a alto nivel..., esto no funcionará del todo porque el primer argumento de `hashPassword()` es el objeto Profesional..., que aún no tenemos dentro de `getDefaults()`.
+
+No pasa nada porque, de todas formas, me gusta crear una propiedad `plainPassword` en `Profesional` para facilitar todo esto. Añadamos eso a continuación, terminemos las fijaciones y actualicemos nuestro autentificador para validar la contraseña. Ah, pero no te preocupes: esa nueva propiedad `plainPassword` no se almacenará en la base de datos.
+
+## 12. Hash de contraseñas en texto plano y PasswordCredentials
+
+El proceso de guardar la contraseña de un usuario siempre es el siguiente:
+
+1. Empieza con una contraseña en texto plano.
+2. Haz un hash de la misma.
+3. Y luego guarda la versión hash en el Profesional.
+
+Esto es algo que vamos a hacer en los accesorios,... pero también lo haremos en un formulario de registro más adelante,... y también lo necesitarías en un formulario de cambio de contraseña.
+
+### Añadir un campo plainPassword
+
+Para facilitar esto, voy a hacer algo opcional. En `Profesional`, arriba, añade una nueva propiedad `private $plainPassword`.
+
+La clave es que esta propiedad no se persistirá en la base de datos: es sólo una propiedad temporal que podemos utilizar durante, por ejemplo, el registro, para almacenar la contraseña simple.
+
+A continuación, iré a "Código"->"Generar" -o Command+N en un Mac- para generar el getter y el setter para esto. El getter devolverá un string nulo:
+
+```php
+class Profesional implements UserInterface, PasswordAuthenticatedUserInterface
+{
+   public function getPlainPassword(): ?string
+   {
+      return $this->plainPassword;
+   }
+   
+   public function setPlainPassword(string $plainPassword): self
+   {
+      $this->plainPassword = $plainPassword;
+      return $this;
+   }
+}
+```
+
+Ahora, si tienes una propiedad `plainPassword`, querrás encontrar `eraseCredentials()` y poner `$this->plainPassword` en `null`:
+
+```php
+class Profesional implements UserInterface, PasswordAuthenticatedUserInterface
+{
+   public function eraseCredentials()
+   {
+      // Si almacena algún dato temporal y confidencial sobre el usuario, bórrelo aquí
+      $this->plainPassword = null;
+   }
+}
+```
+
+Esto..., no es realmente tan importante. Después de que la autenticación sea exitosa, Symfony llama a `eraseCredentials()`. Es..., sólo una forma de "borrar cualquier información sensible" de tu objeto Profesional una vez que se ha realizado la autenticación. Técnicamente nunca estableceremos `plainPassword` durante la autenticación..., así que no importa. Pero, de nuevo, es algo seguro.
+
+### Hacer un hash de la contraseña en los accesorios
+
+De vuelta a `UserFactory`, en lugar de establecer la propiedad password, establece `plainPassword` como "Aa_123456".
+
+Si nos detuviéramos ahora, se establecería esta propiedad..., pero entonces la propiedad `password` seguiría siendo `null`..., y explotaría en la base de datos porque esa columna es necesaria.
+
+Así que, después de que `Foundry` haya terminado de instanciar el objeto, tenemos que ejecutar algún código adicional que lea el `plainPassword` y lo someta a **hash**. Podemos hacerlo aquí abajo, en el método `initialize()`..., mediante un gancho "después de la instanciación":
+
+```php
+final class UserFactory extends ModelFactory
+{
+// ...
+   protected function initialize(): self
+   {
+      // see https://symfony.com/bundles/ZenstruckFoundryBundle/current/index.html#initialization
+      return $this
+         // ->afterInstantiate(function(User $user) {})
+      ;
+   }
+// ...
+}
+```
+
+Esto está muy bien: llama a `$this->afterInstantiate()`, pásale una llamada de retorno y, dentro de digamos si `$user->getPlainPassword()` -por si acaso lo anulamos a `null` -, entonces `$user->setPassword()`. Genera el hash con `$this->passwordHasher->hashPassword()` pasándole el usuario al que estamos tratando de hacer el hash - así que `$user` - y luego lo que sea la contraseña simple: `$user->getPlainPassword()`:
+
+```php
+final class UserFactory extends ModelFactory
+{
+// ...
+   protected function initialize(): self
+   {
+      // see https://symfony.com/bundles/ZenstruckFoundryBundle/current/index.html#initialization
+      return $this
+         ->afterInstantiate(function(Profesional $profesional) {
+                if ($profesional->getPlainPassword()) {
+                    $profesional->setPassword(
+                        $this->passwordHasher->hashPassword($profesional, $profesional->getPlainPassword())
+                    );
+                }
+            })
+      ;
+   }
+// ...
+}
+```
+
+¡Hecho! Vamos a probar esto. Busca tu terminal y ejecuta:
+
+> `symfony console doctrine:fixtures:load`
+
+Esto te llevará un poco más de tiempo que antes, porque hacer el hash de las contraseñas requiere un uso intensivo de la CPU. Pero... ¡funciona! Comprueba la tabla user:
+
+> `symfony console doctrine:query:sql "SELECT * FROM user"`
+
+Y... ¡lo tengo! ¡Cada usuario tiene una versión con hash de la contraseña!
+
+### Validación de la contraseña: PasswordCredentials
+
+Por último, estamos preparados para comprobar la contraseña del usuario dentro de nuestro autentificador. Para ello, tenemos que hacer un hash de la contraseña simple enviada y luego compararla de forma segura con el hash de la base de datos.
+
+Bueno, no necesitamos hacerlo..., porque Symfony lo hará automáticamente. Compruébalo: sustituye `CustomCredentials` por un nuevo `PasswordCredentials` y pásale la contraseña en texto plano enviada:
+
+```php
+use Symfony\Component\Security\Http\Authenticator\Passport\Credentials\PasswordCredentials;
+// ...
+class LoginFormAuthenticator extends AbstractAuthenticator
+{
+// ...
+    public function authenticate(Request $request): PassportInterface
+    {
+// ...
+        return new Passport(
+// ...
+            new PasswordCredentials($password)
+        );
+    }
+// ...
+}
+```
+
+¡Ya está! Pruébalo. Accede con nuestro usuario real - 12345678Z - y copia eso, y luego una contraseña errónea. ¡Muy bien! ¡Contraseña no válida! Ahora introduce la contraseña real Aa_123456. ¡Funciona!
+
+¡Es increíble! Cuando pones un `PasswordCredentials` dentro de tu `Passport`, Symfony lo utiliza automáticamente para comparar la contraseña enviada con la contraseña con hash del usuario en la base de datos. Eso me encanta.
+
+Todo esto es posible gracias a un potente sistema de escucha de eventos dentro de la seguridad. Vamos a aprender más sobre eso a continuación y veremos cómo podemos aprovecharlo para añadir protección CSRF a nuestro formulario de acceso..., con unas dos líneas de código.
