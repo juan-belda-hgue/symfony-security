@@ -733,3 +733,89 @@ Ahora, copia el mensaje de error exacto, incluyendo el punto, pégalo -lo envolv
 ### composer require symfony/translation
 
 Instalando el paquete de traducción.
+
+### Cerrar la sesión
+
+Vamos a añadir una forma de cerrar la sesión. Así como si el usuario fuera a `/logout`, se..., ¡se cierra la sesión! Esto empieza exactamente como esperas: necesitamos una ruta y un controlador.
+
+Dentro de `SecurityController`, copiaré el método `login()`, lo pegaré, lo cambiaré a `/logout`, `app_logout` y llamaré al método `logout`.
+
+Para realizar el cierre de sesión propiamente dicho..., no vamos a poner absolutamente nada de código en este método. En realidad, lanzaré un nuevo `\Exception()` que diga "`logout()` nunca debe ser alcanzado".
+
+Deja que me explique. El cierre de sesión funciona un poco como el inicio de sesión. En lugar de poner alguna lógica en el controlador, vamos a activar algo en nuestro cortafuegos que diga:
+
+> Si el usuario va a `/logout`, intercepta esa petición, cierra la sesión del usuario y redirígelo a otro lugar.
+
+Para activar esa magia, abre `config/packages/security.yaml`. En cualquier lugar de nuestro cortafuegos, añade `logout: true`:
+
+```yaml
+security:
+   firewalls:
+      main:
+         logout: true
+```
+
+Internamente, esto activa un "oyente" que busca cualquier petición a `/logout`.
+
+### Configurar el cierre de sesión
+
+Y en realidad, en lugar de decir simplemente `logout: true`, puedes personalizar cómo funciona esto. Busca tu terminal y ejecuta:
+
+> `symfony console debug:config security`
+
+Como recordatorio, este comando te muestra toda tu configuración actual bajo la clave `security`. Así que toda nuestra configuración más los valores por defecto.
+
+Si ejecutamos esto..., y encontramos el cortafuegos `main`..., mira la sección `logout`. Todas estas claves son los valores por defecto. Observa que hay una llamada `path: /logout`. Por eso está escuchando la URL `/logout.` Si quisieras cerrar la sesión a través de otra URL, sólo tendrías que modificar esta clave aquí.
+
+Pero como aquí tenemos `/logout`..., y eso coincide con nuestro `/logout` de aquí, esto debería funcionar. Por cierto, quizá te preguntes por qué necesitamos crear una ruta y un controlador ¡Buena pregunta! En realidad no necesitamos un controlador, nunca será llamado. Pero sí necesitamos una ruta. Si no tuviéramos una, el sistema de rutas provocaría un error 404 antes de que el sistema de cierre de sesión pudiera hacer su magia. Además, es bueno tener una ruta, para poder generar una URL hacia ella.
+
+Bien: ¡probemos esto! Primero inicia sesión: **12345678Z** y contraseña **Aa_123456**. Genial: estamos autentificados. Ve manualmente a `/logout` y..., ¡ya hemos cerrado la sesión! El comportamiento por defecto del sistema es cerrar la sesión y redirigirnos a la página de inicio. Si necesitas personalizarlo, hay algunas opciones. En primer lugar, en la clave `logout`, puedes cambiar `target` por alguna otra URL o nombre de ruta.
+
+Pero también podemos engancharnos al proceso de cierre de sesión a través de un oyente de eventos, un tema del que hablaremos hacia el final del tutorial.
+
+Siguiente: vamos a dar a cada usuario una contraseña real. Esto implicará **hacer un hash de las contraseñas**, para poder **almacenarlas de forma segura en la base de datos**, y luego comprobar esas contraseñas hash durante la autenticación. Symfony facilita ambas cosas.
+
+## 11. Dar contraseñas a los usuarios
+
+A Symfony no le importa realmente si los usuarios de tu sistema tienen contraseñas o no. Si estás construyendo un sistema de inicio de sesión que lee las claves de la API desde una cabecera, entonces no hay contraseñas. Lo mismo ocurre si tienes algún tipo de sistema SSO. Tus usuarios pueden tener contraseñas..., pero las introducen en algún otro sitio.
+
+Pero para nosotros, sí queremos que cada usuario tenga una contraseña. Cuando usamos antes el comando `make:user`, en realidad nos preguntó si queríamos que nuestros usuarios tuvieran contraseñas. Respondimos que no..., para poder hacer todo esto manualmente. Pero en un proyecto real, yo respondería que sí para ahorrar tiempo.
+
+### PasswordAuthenticatedUserInterface
+
+Sabemos que todas las clases de usuario deben implementar `UserInterface`:
+
+```php
+use Symfony\Component\Security\Core\User\UserInterface;
+
+class Profesional implements UserInterface
+{
+
+}
+```
+
+Entonces, si necesitas comprobar las contraseñas de los usuarios en tu aplicación, también tienes que implementar una segunda interfaz llamada `PasswordAuthenticatedUserInterface`:
+
+```php
+use Symfony\Component\Security\Core\User\PasswordAuthenticatedUserInterface;
+use Symfony\Component\Security\Core\User\UserInterface;
+
+class Profesional implements UserInterface, PasswordAuthenticatedUserInterface
+{
+
+}
+```
+
+Esto requiere que tengas un nuevo método: `getPassword()`.
+
+Si estás usando Symfony 6, no tendrás esto todavía, así que añádelo a tu entidad Profesional.
+
+### Almacenamiento de una contraseña codificada para cada usuario
+
+Bien, vamos a olvidarnos de la seguridad por un momento. En su lugar, céntrate en que necesitamos poder almacenar una contraseña única para cada usuario en la base de datos. Esto significa que nuestra entidad de usuario necesita un nuevo campo! Busca tu terminal y ejecuta:
+
+> `symfony console make:entity`
+
+Actualicemos la entidad Profesional, para añadir un nuevo campo llámalo `password`..., que es una cadena, 255 de longitud es exagerado pero está bien..., y luego di "`no`" a anulable. Pulsa `enter` para terminar.
+
+De vuelta a la clase Profesional, es..., mayormente no sorprendente. Tenemos una nueva propiedad `$password`... y al final, un nuevo método `setPassword()`.

@@ -88,6 +88,9 @@ class Profesional implements UserInterface
     #[ORM\Column(length: 255, nullable: true)]
     private ?string $comunidad_autonoma = null;
 
+    #[ORM\Column(length: 255)]
+    private ?string $password = null;
+
     public function getId(): ?int
     {
         return $this->id;
@@ -396,6 +399,21 @@ class Profesional implements UserInterface
     public function setComunidadAutonoma(?string $comunidad_autonoma): static
     {
         $this->comunidad_autonoma = $comunidad_autonoma;
+
+        return $this;
+    }
+
+    /**
+     * @see PasswordAuthenticatedUserInterface
+     */
+    public function getPassword(): ?string
+    {
+        return null;
+    }
+
+    public function setPassword(string $password): static
+    {
+        $this->password = $password;
 
         return $this;
     }
