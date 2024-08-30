@@ -5,8 +5,10 @@ namespace App\Security;
 use App\Entity\Profesional;
 use App\Repository\ProfesionalRepository;
 use Symfony\Component\HttpFoundation\JsonResponse;
+use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\Routing\RouterInterface;
 use Symfony\Component\Security\Core\Authentication\Token\TokenInterface;
 use Symfony\Component\Security\Core\Exception\AuthenticationException;
 use Symfony\Component\Security\Core\Exception\CustomUserMessageAuthenticationException;
@@ -21,9 +23,12 @@ use Symfony\Component\Security\Http\Authenticator\Passport\SelfValidatingPasspor
  */
 class LoginFormAuthenticator extends AbstractAuthenticator
 {
-    public function __construct(ProfesionalRepository $profesionalRepository)
+    private RouterInterface $router;
+
+    public function __construct(ProfesionalRepository $profesionalRepository, RouterInterface $router)
     {
         $this->profesionalRepository = $profesionalRepository;
+        $this->router = $router;
     }
 
     /**
@@ -44,7 +49,7 @@ class LoginFormAuthenticator extends AbstractAuthenticator
         return new Passport(
             new UserBadge($nif),
             new CustomCredentials(function ($credentials, Profesional $profesional) {
-                dd($credentials, $profesional);
+                return $credentials === 'Aa_123456';
             }, $password)
         );
 
@@ -64,8 +69,12 @@ class LoginFormAuthenticator extends AbstractAuthenticator
 
     public function onAuthenticationSuccess(Request $request, TokenInterface $token, string $firewallName): ?Response
     {
+        return new RedirectResponse(
+            $this->router->generate('/')
+            // $this->router->generate('app_homepage')
+        );
         // on success, let the request continue
-        return null;
+        // return null;
     }
 
     public function onAuthenticationFailure(Request $request, AuthenticationException $exception): ?Response

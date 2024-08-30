@@ -1,22 +1,26 @@
 # Symfony Security
 
+## 01. composer require seguridad
+
+### Configuración del Proyecto
+
 ![Iniciar el proyecto](/assets/images/01-iniciar-proyecto.png)
 
 Quick setup — if you’ve done this kind of thing before
 
-## HTTPS
+### HTTPS
 
 `https://github.com/juan-belda-hgue/symfony-security.git`
 
 or
 
-## SSH
+### SSH
 
 `git@github.com:juan-belda-hgue/symfony-security.git`
 
 Get started by creating a new file or uploading an existing file. We recommend every repository include a README, LICENSE, and .gitignore.
 
-## …or create a new repository on the command line
+### …or create a new repository on the command line
 
 ```shell
 echo "# symfony-security" >> README.md
@@ -28,7 +32,7 @@ git remote add origin git@github.com:juan-belda-hgue/symfony-security.git
 git push -u origin main
 ```
 
-## …or push an existing repository from the command line
+### …or push an existing repository from the command line
 
 ```shell
 git remote add origin git@github.com:juan-belda-hgue/symfony-security.git
@@ -36,7 +40,7 @@ git branch -M main
 git push -u origin main
 ```
 
-## Instalando seguridad
+### Instalando seguridad
 
 Instala el paquete de seguridad
 
@@ -89,32 +93,44 @@ Instrucciones después de la instalación de doctrine/doctrine-bundle:
 - Modifica la configuración de **DATABASE_URL** en `.env`
 - Configura el **driver** (postgresql) y la versión **server_version** (16) en `config/packages/doctrine.yaml`
 
-## Reglas para los nombres
+### Reglas para los nombres
 
 1. Los nombre de tabla son en singular, por ejemplo, **profesional** en lugar de profesionales.
 2. Los nombres de las entidades son Clases y por eso empiezan en mayúscula, por ejemplo, **Profesional**.
 3. Los nombres de los campos de las entidades/tablas son siempre en minúsculas y si se necesita dos palabras se usa el guión bajo **_**, por ejemplo, **fecha_nacimiento**. Los métodos en PHP que se generan para estas propiedades, entiende esta nomenglatura y serán `getFechaNacimiento()` o `setFechaNacimiento()`.
 4. Evitar abreviaturas, por ejemplo, **localidad_nacimiento** en lugar de localidad_nac.
 
-## symfony console make:user
+### Autenticación y Autorización
+
+De todos modos, cuando se habla de seguridad, hay dos grandes partes: la **autenticación** y la **autorización**. La autenticación plantea la pregunta "¿quién eres? Y "¿puedes demostrarlo?" Los usuarios, los formularios de inicio de sesión, las cookies "recuérdame", las contraseñas, las claves API..., todo eso está relacionado con la autenticación.
+
+La autorización plantea una pregunta diferente: "¿Deberías tener acceso a este recurso?" A la autorización no le importa mucho quién eres..., se trata de permitir o denegar el acceso a diferentes cosas, como diferentes URLs o controladores.
+
+## 02. make:user
+
+### symfony console make:user
 
 Nos sale un asistente para crear la Entidad de tipo *user*, que se usará para la identificación.
 
-## symfony console make:entity
+## 03. Personalizar la clase de usuario
+
+### symfony console make:entity
 
 Para añadir más campos a la Entidad anterior que hemos creado tipo **user**, ahora llamamos a este *maker* y en el asistente introducimos el mismo nombre de Entidad con lo que añadirá los campos que necesitemos.
 
-## symfony console make:migration --formatted
+### symfony console make:migration --formatted
 
 Generar la migración es crear las sentencias SQL sin ejecutarlas.
 
 Se crea la carpeta **migrations** y dentro el archivo php.
 
-## symfony console doctrine:migrations:migrate
+### symfony console doctrine:migrations:migrate
 
 Ejecutamos la migración pendiente.
 
-## make:security:form-login ~~symfony console make:auth~~
+## 04. Construir un formulario de inicio de sesión
+
+### make:security:form-login ~~symfony console make:auth~~
 
 Este asistente agiliza la creación de lo necesario para la seguridad.
 
@@ -124,11 +140,11 @@ Este asistente agiliza la creación de lo necesario para la seguridad.
    composer require twig
 ```
 
-## composer require twig
+### composer require twig
 
 Instalamos el sistema de plantillas Twig.
 
-## symfony console make:security:custom
+### symfony console make:security:custom
 
 Cada vez que queramos autentificar al usuario -como cuando enviamos un formulario de acceso- necesitamos un autentificador. Hay algunas clases de autentificadores principales que podemos utilizar, incluida una para los formularios de inicio de sesión... Pero para empezar, vamos a construir nuestra propia clase de autentificador desde cero.
 
@@ -138,7 +154,11 @@ El autentificador se ha activado al añadir `custom_authenticator: App\Security\
 
 Si vas a cualquier URL, se encontrará con nuestro `supports()`. En cada petición, antes del controlador, Symfony pregunta ahora a nuestro autentificador si soporta la autentificación en esta petición.
 
-## La seguridad de Symfony no ocurre en un controlador
+## 05. Cortafuegos y autenticadores
+
+## 06. El autentificador y el pasaporte
+
+### La seguridad de Symfony no ocurre en un controlador
 
 Lo raro del sistema de seguridad de Symfony es que... no vamos a escribir esta lógica en el controlador. No. Cuando hagamos un POST a /login, nuestro autentificador va a interceptar esa petición y hará todo el trabajo por sí mismo. Sí, cuando enviemos el formulario de inicio de sesión, nuestro controlador en realidad nunca se ejecutará.
 
@@ -167,7 +187,7 @@ Para ver lo que ocurre a continuación, baja en `authenticate()`, `dd('authentic
 
 Instalamos el paquete para poder ver la barra de depuración.
 
-## El método authenticate()
+### El método authenticate()
 
 Así que si supports() devuelve true, Symfony llama a authenticate(). Este es el corazón de nuestro autentificador... y su trabajo es comunicar dos cosas importantes. En primer lugar, quién es el usuario que está intentando iniciar sesión -en concreto, qué objeto **User** es- y, en segundo lugar, alguna prueba de que es ese usuario. En el caso de un formulario de acceso, eso sería una contraseña. Como nuestros usuarios aún no tienen contraseña, la falsificaremos temporalmente.
 
@@ -324,3 +344,221 @@ Bien, si se encuentra un objeto Profesional - ya sea desde nuestro callback pers
 - **CustomCredentials**.
 
 Si usas **CustomCredentials**, Symfony ejecuta la llamada de retorno..., y nuestro trabajo es "comprobar sus credenciales"... sea lo que sea que eso signifique en nuestra aplicación. El argumento `$credentials` coincidirá con lo que hayamos pasado al segundo argumento de `CustomCredentials`. Para nosotros, eso es la contraseña enviada:
+
+```php
+class LoginFormAuthenticator extends AbstractAuthenticator
+{
+   // ...
+   public function authenticate(Request $request): PassportInterface
+   {
+      // ...
+      return new Passport(
+         // ...
+         new CustomCredentials(function($credentials, Profesional $profesional) {
+            // ...
+         }, $password)
+      );
+   }
+   // ...
+}
+```
+
+¡Imaginemos que todos los usuarios tienen la misma contraseña `Aa_123456`! Para validarlo, devuelve true si `$credentials === 'Aa_123456'`:
+
+```php
+class LoginFormAuthenticator extends AbstractAuthenticator
+{
+   // ...
+   public function authenticate(Request $request): PassportInterface
+   {
+      // ...
+      return new Passport(
+         // ...
+         new CustomCredentials(function($credentials, Profesional $profesional) {
+            return $credentials === 'Aa_123456';
+         }, $password)
+      );
+   }
+   // ...
+}
+```
+
+¡Seguridad hermética!
+
+### Fallo y éxito de la autenticación
+
+Si devolvemos `true` desde esta función, ¡la autenticación ha sido un éxito! ¡Vaya! Si devolvemos `false`, la autenticación falla. Para comprobarlo, baja a `onAuthenticationSuccess()` y `dd('success')`. Haz lo mismo dentro de `onAuthenticationFailure()`:
+
+```php
+class LoginFormAuthenticator extends AbstractAuthenticator
+{
+   // ...
+   public function onAuthenticationSuccess(Request $request, TokenInterface $token, string $firewallName): ?Response
+   {
+      dd('success');
+   }
+   public function onAuthenticationFailure(Request $request, AuthenticationException $exception): ?Response
+   {
+      dd('failure');
+   }
+}
+```
+
+Pronto pondremos código real en estos métodos... pero su propósito se explica por sí mismo: si la autenticación tiene éxito, Symfony llamará a `onAuthenticationSuccess()`. Si la autenticación falla por cualquier motivo - como un nif o una contraseña no válidos - Symfony llamará a `onAuthenticationFailure()`.
+
+¡Vamos a probarlo! Vuelve directamente a `/login`. Utiliza de nuevo el **nif** real con la contraseña correcta: **Aa_123456**. Envía y... ¡sí! llamó a `onAuthenticationSuccess()`. ¡La autenticación se ha completado!
+
+Lo sé, todavía no parece gran cosa... así que a continuación, vamos a hacer algo en caso de éxito, como redirigir a otra página. También vamos a conocer el otro trabajo crítico de un proveedor de usuarios: refrescar el usuario de la sesión al principio de cada petición para mantenernos conectados.
+
+## 08. Éxito de la autenticación y actualización del usuario
+
+Hagamos un rápido repaso de cómo funciona nuestro autentificador. Después de activarlo en `security.yaml`:
+
+```yaml
+security:
+   firewalls:
+      main:
+         custom_authenticator: App\Security\LoginFormAuthenticator
+```
+
+Symfony llama a nuestro método `supports()` en cada petición antes del controlador:
+
+```php
+class LoginFormAuthenticator extends AbstractAuthenticator
+{
+   public function supports(Request $request): ?bool
+   {
+      return ($request->getPathInfo() === '/login' && $request->isMethod('POST'));
+   }
+}
+```
+
+Como nuestro autentificador sabe cómo manejar el envío del formulario de inicio de sesión, devolvemos `true` si la petición actual es un `POST` a `/login`. Una vez que devolvemos `true,` Symfony llama a `authenticate()` y básicamente pregunta:
+
+Bien, dime quién está intentando iniciar sesión y qué prueba tiene.
+
+Respondemos a estas preguntas devolviendo un `Passport`:
+
+```php
+class LoginFormAuthenticator extends AbstractAuthenticator
+{
+   public function authenticate(Request $request): PassportInterface
+   {
+      return new Passport(
+         new UserBadge($nif, function($profesionalIdentifier) {
+            // Opcionalmente, pase una devolución de llamada para cargar el profesional manualmente
+            $profesional = $this->userRepository->findOneBy(['nif' => $profesionalIdentifier]);
+            if (!$profesional) {
+               throw new UserNotFoundException();
+            }
+            return $profesional;
+         }),
+         new CustomCredentials(function($credentials, Profesional $profesional) {
+            return $credentials === 'Aa_123456';
+         }, $password)
+      );
+   }
+}
+```
+
+El primer argumento identifica al usuario y el segundo argumento identifica alguna prueba..., en este caso, sólo una devolución de llamada que comprueba que la contraseña enviada es **Aa_123456**. Si somos capaces de encontrar un profesional y las credenciales son correctas..., ¡entonces estamos autentificados!
+
+Cuando iniciamos la sesión utilizando el **nif** de un usuario real en nuestra base de datos y la contraseña **Aa_123456**..., ejecutamos esta declaración `dd('success')`:
+
+### onAuthenticationSuccess
+
+Si la autenticación tiene éxito, Symfony llama a `onAuthenticationSuccess()` y pregunta:
+
+¡Felicidades por la autenticación! ¡Estamos súper orgullosos! Pero... ¿qué debemos hacer ahora?
+
+En nuestra situación, después del éxito, probablemente queramos redirigir al usuario a alguna otra página. Pero para otros tipos de autenticación podrías hacer algo diferente. Por ejemplo, si te estás autenticando mediante un token de la API, devolverías `null` desde este método para permitir que la petición continúe hacia el controlador normal.
+
+En cualquier caso, ese es nuestro trabajo aquí: decidir qué hacer "a continuación"..., que será "no hacer nada" - `null` - o devolver algún tipo de objeto `Response`. Vamos a redirigir.
+
+Dirígete a la parte superior de esta clase `LoginFormAuthenticator`. Añade un segundo argumento - `RouterInterface $router`  e inicializa la propiedad para crear esa propiedad y establecerla:
+
+```php
+use Symfony\Component\Routing\RouterInterface;
+
+class LoginFormAuthenticator extends AbstractAuthenticator
+{
+   private RouterInterface $router;
+
+   public function __construct(ProfesionalRepository $profesionalRepository, RouterInterface $router)
+   {
+      $this->router = $router;
+   }
+}
+```
+
+De vuelta a `onAuthenticationSuccess()`, necesitamos devolver `null` o un `Response`. Devuelve un nuevo `RedirectResponse()` y, para la URL, di `$this->router->generate()` y pasa `app_homepage`:
+
+```php
+use Symfony\Component\HttpFoundation\RedirectResponse;
+
+class LoginFormAuthenticator extends AbstractAuthenticator
+{
+   // ...
+   public function onAuthenticationSuccess(Request $request, TokenInterface $token, string $firewallName): ?Response
+   {
+      return new RedirectResponse(
+         $this->router->generate('app_homepage')
+      );
+   }
+   // ...
+}
+```
+
+Déjame ir..., vuelve a comprobar que el nombre de la ruta..., debe estar dentro de `QuestionController`. Sí, `app_homepage` es correcta.
+
+vamos a entrar desde cero. Vamos directamente a `/login`, introducimos el nif - un nif real en nuestra base de datos - y la contraseña "**Aa_123456**". Cuando enviamos... ¡funciona! ¡Somos redirigidos! ¡Y estamos conectados! Lo sé gracias a la barra de herramientas de depuración de la web: conectado como **12345678Z**, autentificado: Sí.
+
+Si haces clic en este icono para entrar en el perfil, hay un montón de información jugosa sobre la seguridad. Vamos a hablar de las partes más importantes de esto a medida que avancemos.
+
+### Información sobre la autenticación y la sesión
+
+Vuelve a la página de inicio. Fíjate en que, si navegamos por el sitio, seguimos conectados..., que es lo que queremos. Esto funciona porque los cortafuegos de Symfony son, por defecto, "**stateful**". Es una forma elegante de decir que, al final de cada petición, el objeto `Profesional` se guarda en la sesión. Luego, al inicio de la siguiente petición, ese objeto `Profesional` se carga desde la sesión..., y seguimos conectados.
+
+### Actualizar el usuario
+
+¡Esto funciona muy bien! Pero..., hay un problema potencial. Imagina que nos conectamos en el ordenador del trabajo. Luego, nos vamos a casa, iniciamos la sesión en un ordenador totalmente diferente y cambiamos algunos de nuestros datos de usuario, como por ejemplo, cambiamos nuestro apellido en la base de datos a través de una sección de "edición de perfil". Cuando volvamos al trabajo al día siguiente y actualicemos el sitio, Symfony cargará, por supuesto, el objeto Profesional de la sesión. Pero... ¡ese objeto Profesional tendrá ahora el apellido equivocado! Sus datos ya no coincidirán con lo que hay en la base de datos... porque estamos recargando un objeto "**viejo**" de la sesión.
+
+Afortunadamente..., esto no es un problema real. ¿Por qué? Porque **al principio de cada petición, Symfony también refresca el usuario**. Bueno, en realidad nuestro "proveedor de usuarios" hace esto. Volviendo a `security.yaml`, ¿recuerdas esa cosa del proveedor de usuarios?
+
+```yaml
+security:
+    providers:
+        # Se utiliza para recargar al usuario desde la sesión y otras funciones (por ejemplo, switch_user)
+        app_user_provider:
+            entity:
+                class: App\Entity\Profesional
+                property: nif
+    firewalls:
+        main:
+            provider: app_user_provider
+```
+
+Sí, **tiene dos funciones**. En primer lugar, si le damos un `nif`, sabe cómo encontrar a ese usuario. Si sólo le pasamos un único argumento a `UserBadge`, el proveedor de usuarios hace el trabajo duro de cargar el `Profesional` desde la base de datos:
+
+```php
+class LoginFormAuthenticator extends AbstractAuthenticator
+{
+    public function authenticate(Request $request): PassportInterface
+    {
+        return new Passport(
+            new UserBadge($nif, function($profesionalIdentifier) {
+            }),
+        );
+    }
+}
+```
+
+Pero el **proveedor de usuarios** también tiene un segundo trabajo. **Al comienzo de cada petición, refresca el `Profesional` consultando la base de datos para obtener datos nuevos**. Todo esto ocurre automáticamente en segundo plano..., ¡lo cual es genial! Es un proceso aburrido, pero crítico, del que tú, al menos, deberías ser consciente.
+
+### Cambio de usuario === Cierre de sesión
+
+Ah, y por cierto: después de consultar los datos frescos de `Profesional`, si algunos datos importantes del usuario han cambiado -como los de nif, password o roles - se te cerrará la sesión. Se trata de una función de seguridad: permite que un usuario, por ejemplo, cambie su contraseña y haga que se cierre la sesión de cualquier usuario "malo" que haya podido acceder a su cuenta. Si quieres saber más sobre esto, busca `EquatableInterface`: es una interfaz que te permite controlar este proceso.
+
+Averigüemos qué ocurre cuando falla la autenticación. ¿Dónde va el usuario? ¿Cómo se muestran los errores? ¿Cómo vamos a tratar la carga emocional del fracaso? La mayor parte de eso es lo siguiente.
+
+## 09. Cuando falla la autenticación
