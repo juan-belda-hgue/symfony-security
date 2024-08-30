@@ -614,17 +614,122 @@ Si refrescamos ahora... ¡boom! Nuestro `UserNotFoundException` se pasa ahora di
 
 Bien, pensemos. En `onAuthenticationFailure()`..., ¿qué queremos hacer? Nuestro trabajo en este método es, como puedes ver, devolver un objeto `Response`. Para un formulario de inicio de sesión, lo que probablemente queramos hacer es redirigir al usuario de vuelta a la página de inicio de sesión, pero mostrando un error.
 
-Para poder hacerlo, vamos a guardar esta excepción -que contiene el mensaje de error- en la sesión. Digamos `$request->getSession()->set()`. En realidad podemos utilizar la clave que queramos..., pero hay una clave estándar que se utiliza para almacenar los errores de autenticación. Puedes leerla desde una constante: - la del componente de seguridad de Symfony - `SecurityRequestAttributes::AUTHENTICATION_ERROR`. Pasa `$exception` al segundo argumento:
+Para poder hacerlo, vamos a guardar esta excepción -que contiene el mensaje de error- en la sesión. Digamos `$request->getSession()->set()`. En realidad podemos utilizar la clave que queramos..., pero hay una clave estándar que se utiliza para almacenar los errores de autenticación. Puedes leerla desde una constante: - la del componente de seguridad de Symfony - `SecurityRequestAttributes::AUTHENTICATION_ERROR`. Y pasa `$exception` al segundo argumento.
+
+Ahora que el error está en la sesión, vamos a redirigirnos a la página de inicio de sesión. Haré trampa y copiaré el `RedirectResponse` de antes... y cambiaré la ruta a `app_login`:
 
 ```php
 class LoginFormAuthenticator extends AbstractAuthenticator
 {
-    public function onAuthenticationFailure(Request $request, AuthenticationException $exception): ?Response
+   public function onAuthenticationFailure(Request $request, AuthenticationException $exception): ?Response
+   {
+      // DEPRECATED 6.4 $request->getSession()->set(Security::AUTHENTICATION_ERROR, $exception);
+      $request->getSession()->set(SecurityRequestAttributes::AUTHENTICATION_ERROR, $exception);
+      
+      return new RedirectResponse(
+         $this->router->generate('app_login')
+      );
+   }
+}
+```
+
+### AuthenticationUtils: Renderizando el error
+
+¡Genial! A continuación, dentro del controlador `login()`, tenemos que leer ese error y renderizarlo. La forma más directa de hacerlo sería coger la sesión y leer esta clave. Pero... ¡es incluso más fácil que eso! Symfony proporciona un servicio que tomará la clave de la sesión automáticamente. Añade un nuevo argumento de tipo `AuthenticationUtils`:
+
+```php
+class SecurityController extends AbstractController
+{
+    public function login(AuthenticationUtils $authenticationUtils): Response
     {
-        // DEPRECATED $request->getSession()->set(Security::AUTHENTICATION_ERROR, $exception);
-        $request->getSession()->set(SecurityRequestAttributes::AUTHENTICATION_ERROR, $exception);
+        return $this->render('security/login.html.twig', [
+            'error' => $authenticationUtils->getLastAuthenticationError(),
+        ]);
     }
 }
 ```
 
-Ahora que el error está en la sesión, vamos a redirigirnos a la página de inicio de sesión. Haré trampa y copiaré el `RedirectResponse` de antes... y cambiaré la ruta a `app_login`:
+Eso es sólo un atajo para leer esa clave de la sesión.
+
+Esto significa que la variable `error` va a ser literalmente un objeto `AuthenticationException`. Y recuerda, para averiguar qué ha ido mal, todos los objetos `AuthenticationException` tienen un método `getMessageKey()` que devuelve una explicación.
+
+En `templates/security/login.html.twig`, vamos a devolver eso. Justo después del `h1`, digamos que si error, entonces añade un `div` con `alert alert-danger`. Dentro renderiza `error.messageKey`:
+
+```php
+{% block body %}
+<div class="container">
+    <div class="row">
+        <div class="login-form bg-light mt-4 p-4">
+            <form method="post" class="row g-3">
+                <h1 class="h3 mb-3 font-weight-normal">Por favor, inicia sesión</h1>
+                {% if error %}
+                    <div class="alert alert-danger">{{ error.messageKey }}</div>
+                {% endif %}
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+```
+
+No quieres usar `error.message` porque si tuvieras algún tipo de error interno -como un error de conexión a la base de datos- ese mensaje podría contener detalles sensibles. Pero `error.messageKey` está garantizado que es seguro.
+
+¡Hora de probar! ¡Refrescar! ¡Sí! Somos redirigidos de nuevo a `/login` y vemos:
+
+**No se ha podido encontrar el nombre de usuario.**
+
+Ese es el mensaje si no se puede cargar el objeto Profesional: el error que viene de `UserNotFoundException`. No es un gran mensaje..., ya que nuestros usuarios se conectan con un nif, no con un nombre de usuario.
+
+Así que, a continuación, vamos a aprender a personalizar estos mensajes de error y a añadir una forma de cerrar la sesión.
+
+## 10. Personalizar los mensajes de error y añadir el cierre de sesión
+
+1. Cuando falla el inicio de sesión, almacenamos el `AuthenticationException` en la sesión -que explica lo que ha ido mal- y luego redirigimos a la página de inicio de sesión.
+2. En esa página, leemos esa excepción de la sesión utilizando este bonito servicio `AuthenticationUtils`.
+3. Y finalmente, en la plantilla, llamamos al método `getMessageKey()` para mostrar un mensaje seguro que describa por qué ha fallado la autenticación.
+
+Por ejemplo, si introducimos un nif que no existe, veremos
+
+**No se pudo encontrar el nombre de usuario.**
+
+A nivel técnico, esto significa que no se ha podido encontrar el objeto Profesional. Genial..., pero para nosotros no es un gran mensaje porque nos estamos conectando a través de un nif. Además, si introducimos un usuario válido - 12345678Z - con una contraseña no válida, vemos
+
+**Credenciales no válidas.**
+
+Este es un mensaje mejor... pero no es súper amigable.
+
+### ¿Traducción de los mensajes de error?
+
+Entonces, ¿cómo podemos personalizarlos? La respuesta es sencilla y quizá un poco sorprendente: los traducimos. Compruébalo: en la plantilla, después de `messageKey`, añade `|trans` para traducirlo. Pásale dos argumentos. El primero es `error.messageData`. No es demasiado importante pero en el mundo de la traducción, a veces tus traducciones pueden tener valores "comodín" y aquí pasas los valores de esos comodines. El segundo argumento se llama "dominio de traducción" que es casi como una categoría de traducción. Pasa security:
+
+```php
+{% block body %}
+<div class="container">
+    <div class="row">
+        <div class="login-form bg-light mt-4 p-4">
+            <form method="post" class="row g-3">
+// ... lines 10 - 11
+                {% if error %}
+                    <div class="alert alert-danger">{{ error.messageKey|trans(error.messageData, 'security') }}</div>
+                {% endif %}
+// ... lines 15 - 29
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+```
+
+Si tienes un sitio multilingüe, todos los mensajes centrales de autentificación ya han sido traducidos a otros idiomas..., y esas traducciones están disponibles en un dominio llamado `security`. Así que al utilizar el dominio `security` aquí, si cambiamos el sitio al español, obtendríamos instantáneamente mensajes de autenticación en español.
+
+Si nos detuviéramos ahora..., ¡no cambiaría absolutamente nada! Pero como estamos pasando por el traductor, tenemos la oportunidad de "traducir" estas cadenas del inglés a..., ¡un inglés diferente!
+
+En el directorio `translations/` -que deberías tener automáticamente porque el componente de traducción ya está instalado- crea un nuevo archivo llamado `security.en.yaml`: `security` porque estamos utilizando el dominio de traducción `security` y `en` para el inglés. También puedes crear archivos de traducción `.xlf` - YAML es simplemente más fácil para lo que necesitamos hacer.
+
+Ahora, copia el mensaje de error exacto, incluyendo el punto, pégalo -lo envolveré entre comillas para estar seguro- y pon algo diferente como
+
+¡Contraseña introducida no válida!
+
+### composer require symfony/translation
+
+Instalando el paquete de traducción.
