@@ -1147,3 +1147,379 @@ Y..., ¡ya hemos terminado! Internamente, un oyente se dará cuenta de esta insi
 A continuación: vamos a aprovechar el sistema "recuérdame" de Symfony para que los usuarios puedan permanecer conectados durante mucho tiempo. Esta función también aprovecha el sistema de oyentes y una insignia.
 
 ## 14. Sistema de recordarme
+
+Otra buena característica de un formulario de acceso es la casilla "recuérdame". Aquí almacenamos una cookie "recuérdame" de larga duración en el navegador del usuario, de modo que cuando cierre su navegador -y por tanto, pierda su sesión- esa cookie le mantendrá conectado... durante una semana... o un año... o lo que configuremos. Añadamos esto.
+
+### Habilitar el sistema **remember_me**
+
+El primer paso es ir a `config/packages/security.yaml` y activar el sistema. Lo hacemos diciendo `remember_me:` y, a continuación, estableciendo una pieza de configuración necesaria: `secret:` establecer en `%kernel.secret%`:
+
+```yaml
+security:
+// ...
+    firewalls:
+// ...
+        main:
+// ...
+            remember_me:
+                secret: '%kernel.secret%'
+```
+
+Esto se utiliza para "firmar" el valor de la cookie remember me... y el parámetro `kernel.secret` viene en realidad de nuestro archivo `.env`:
+
+```yaml
+// Archivo .env
+// ...
+###> symfony/framework-bundle ###
+// ...
+APP_SECRET=c28f3d37eba278748f3c0427b313e86a
+###< symfony/framework-bundle ###
+// ...
+```
+
+Sí, este `APP_SECRET` acaba convirtiéndose en el parámetro `kernel.secret`..., al que podemos hacer referencia aquí.
+
+Como es normal, hay un montón de otras opciones que puedes poner en `remember_me`... y puedes ver muchas de ellas ejecutando:
+
+`symfony console debug:config security`
+
+Busca la sección `remember_me:`. Una importante es `lifetime:`, que es el tiempo de validez de la cookie "Recuérdame".
+
+Antes he dicho que la mayor parte de la configuración que ponemos bajo nuestro cortafuegos sirve para activar diferentes autentificadores. Por ejemplo, `custom_authenticator`: activa nuestro `LoginFormAuthenticator`:
+
+Lo que significa que ahora se llama a nuestra clase al inicio de cada petición y se busca el envío de un formulario de acceso. La configuración de `remember_me` también activa un autentificador: un autentificador central llamado `RememberMeAuthenticator`. En cada petición, éste busca una cookie "recuérdame" -que crearemos en un segundo- y, si está ahí, la utiliza para autenticar al usuario.
+
+### Añadir la casilla de verificación "Recuérdame
+
+Ahora que esto está en su sitio, nuestro siguiente trabajo es establecer esa **cookie** en el navegador del usuario después de que se conecte. Abre `login.html.twig`. En lugar de añadir siempre la cookie, dejemos que el usuario elija. Justo después de la contraseña, añade un `div` con algunas clases, una etiqueta y una entrada `type="checkbox"`, `name="_remember_me"`:
+
+```php
+{% block body %}
+<div class="container">
+    <div class="row">
+        <div class="login-form bg-light mt-4 p-4">
+            <form method="post" class="row g-3">
+// ...
+                <div class="form-check mb-3">
+                    <label>
+                        <input type="checkbox" name="_remember_me" class="form-check-input"> Recuérdame
+                    </label>
+                </div>
+// ...
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+```
+
+El nombre - `_remember_me` - es importante y tiene que ser ese valor. Como veremos en un minuto, el sistema busca una casilla de verificación con este nombre exacto.
+
+Bien, actualiza el formulario. Genial, ¡tenemos una casilla de verificación!
+
+### Optar por la Cookie Remember Me
+
+Si marcáramos la casilla y la enviáramos... no pasaría absolutamente nada diferente: Symfony no establecería una cookie "Recuérdame".
+
+Esto se debe a que nuestro autentificador necesita anunciar que admite el establecimiento de cookies remember me. Esto es un poco raro, pero piénsalo: el hecho de que hayamos activado el sistema `remember_me` en `security.yaml` no significa que queramos que SIEMPRE se establezcan cookies remember me. En un formulario de inicio de sesión, definitivamente. Pero si tuviéramos algún tipo de autenticación con token de la API..., entonces no querríamos que Symfony intentara establecer una cookie remember me en esa petición de la API.
+
+En cualquier caso, todo lo que tenemos que añadir es una pequeña bandera que diga que este mecanismo de autenticación sí admite añadir cookies remember me. Hazlo con una insignia: `new RememberMeBadge()`:
+
+```php
+\\ Archivo src/Security/LoginFormAuthenticator.php
+
+use Symfony\Component\Security\Http\Authenticator\Passport\Badge\RememberMeBadge;
+// ...
+class LoginFormAuthenticator extends AbstractAuthenticator
+{
+// ...
+    public function authenticate(Request $request): PassportInterface
+    {
+// ...
+        return new Passport(
+            new UserBadge($email, function($userIdentifier) {
+// ...
+            new PasswordCredentials($password),
+            [
+// ...
+                new RememberMeBadge(),
+            ]
+        );
+    }
+// ...
+}
+```
+
+¡Eso es todo! Pero hay una cosa rara. Con el `CsrfTokenBadge`, leemos el token **POST** y se lo pasamos a la insignia. Pero con `RememberMeBadge`..., no hacemos eso. En su lugar, internamente, el sistema "recuérdame" sabe que debe buscar una casilla llamada, exactamente, `_remember_me`.
+
+Todo el proceso funciona así. Después de que nos autentifiquemos con éxito, el sistema "recuérdame" buscará esta insignia y mirará si esta casilla está marcada. Si ambas cosas son ciertas, añadirá la cookie "recuérdame".
+
+Veamos esto en acción. Actualiza la página..., e introduce nuestro nif normal, la contraseña "Aa_123456", haz clic en la casilla "Recuérdame"..., y pulsa "Iniciar sesión". La autenticación se ha realizado con éxito. No es ninguna sorpresa. Pero ahora abre las herramientas de tu navegador, ve a "Aplicación", busca "Cookies" y..., ¡sí! Tenemos una nueva cookie `REMEMBERME`..., que caduca dentro de mucho tiempo: ¡es decir, dentro de 1 año!
+
+### Ver cómo nos autentifica la cookie RememberMe
+
+Para demostrar que el sistema funciona, elimina la cookie de sesión que normalmente nos mantiene conectados. Observa lo que ocurre cuando actualizamos. ¡Seguimos conectados! Eso es gracias al autentificador `remember_me`.
+
+Cuando te autentificas, internamente, tu objeto `Profesional` se envuelve en un objeto "token"..., que normalmente no es demasiado importante. Pero ese token muestra cómo te has autentificado. Ahora dice `RememberMeToken`..., lo que demuestra que la cookie "Recuérdame" fue la que nos autenticó.
+
+Ah, y si te preguntas por qué Symfony no ha añadido una nueva cookie de sesión..., eso es sólo porque **la sesión de Symfony es perezosa**. No lo verás hasta que vayas a una página que utilice la sesión - como la página de inicio de sesión. Ahora está de vuelta.
+
+Y..., ¡eso es todo! Además de nuestro `LoginFormAuthenticator`, ahora hay un segundo autentificador que busca información de autentificación en una cookie de `REMEMBERME`.
+
+Sin embargo, podemos hacer todo esto un poco más elegante. A continuación, vamos a ver cómo podríamos añadir una cookie "Recuérdame" para todos los usuarios cuando se conecten, sin necesidad de una casilla de verificación. También vamos a explorar una nueva opción del sistema "recuérdame" que permite invalidar todas las cookies "recuérdame" existentes si el usuario cambia su contraseña.
+
+## 15. Recordarme siempre y "signature_properties"
+
+Ahora que tenemos el sistema "recuérdame" funcionando, ¡juguemos con él! En lugar de dar al usuario la opción de activar "recuérdame", ¿podríamos..., activarlo siempre?
+
+En este caso, ya no necesitamos la casilla "Recuérdame", así que la eliminamos por completo.
+
+### always_remember_me: true
+
+Hay dos formas de "forzar" al sistema remember me a establecer siempre una cookie aunque no esté la casilla de verificación.
+
+- La primera es en security.yaml: establecer always_remember_me: en true:
+
+   ```yaml
+   security:
+   // ... lines 2 - 16
+       firewalls:
+   // ... lines 18 - 20
+         main:
+   // ... lines 22 - 27
+               remember_me:
+   // ... line 29
+                always_remember_me: true
+   ```
+
+   Con esto, nuestro autentificador sigue necesitando añadir un `RememberMeBadge`. Pero el sistema ya no buscará esa casilla. Mientras vea esta insignia, añadirá la cookie.
+
+### Habilitación en el RememberMeBadge
+
+- La otra forma de habilitar la cookie "Recuérdame" en todas las situaciones es a través de la propia insignia. Comenta la nueva opción:
+
+   ```yaml
+   security:
+   // ... lines 2 - 16
+       firewalls:
+   // ... lines 18 - 20
+         main:
+   // ... lines 22 - 27
+               remember_me:
+   // ... line 29
+                #always_remember_me: true
+   ```
+
+Dentro de `LoginFormAuthenticator`, en la propia insignia, puedes llamar a `->enable()`..., que devuelve la instancia de la insignia:
+
+```php
+\\ Archivo src/Security/LoginFormAuthenticator.php
+
+use Symfony\Component\Security\Http\Authenticator\Passport\Badge\RememberMeBadge;
+// ...
+class LoginFormAuthenticator extends AbstractAuthenticator
+{
+// ...
+    public function authenticate(Request $request): PassportInterface
+    {
+// ...
+        return new Passport(
+            new UserBadge($email, function($userIdentifier) {
+// ...
+            new PasswordCredentials($password),
+            [
+// ...
+                new RememberMeBadge()->enable(),
+            ]
+        );
+    }
+// ...
+}
+```
+
+Esto dice:
+
+> No me interesa ninguna otra configuración ni la casilla de verificación: Definitivamente quiero que el sistema remember me añada una cookie.
+
+¡Vamos a probarlo! Borra la sesión y la cookie `REMEMBERME`. Esta vez, cuando iniciemos la sesión..., ¡oh, token CSRF no válido! Eso es porque acabo de matar mi sesión sin refrescar - Refresca e inténtalo de nuevo.
+
+¡Muy bien! ¡Tenemos la cookie REMEMBERME!
+
+### Asegurar las cookies Remember Me: Invalidar al cambiar los datos del usuario
+
+Hay una cosa con la que debes tener cuidado cuando se trata de las cookies "Recuérdame". Si un usuario malintencionado consiguiera de algún modo acceder a mi cuenta -por ejemplo, si robara mi contraseña-, podría, por supuesto, iniciar la sesión. Normalmente, eso es un asco..., pero en cuanto lo descubra, podría cambiar mi contraseña, lo que les desconectaría.
+
+Pero..., si ese mal usuario tiene una cookie de REMEMBERME..., entonces, aunque cambie mi contraseña, seguirá conectado hasta que esa cookie caduque..., lo que podría ser dentro de mucho tiempo. Estas cookies son casi tan buenas como las reales: actúan como "billetes de autentificación gratuitos". Y siguen funcionando -independientemente de lo que hagamos- hasta que caducan.
+
+Afortunadamente, en el nuevo sistema de autenticación, hay una forma muy interesante de evitar esto. En `security.yaml`, debajo de `remember_me`, añade una nueva opción llamada `signature_properties` configurada en un array con password dentro:
+
+   ```yaml
+   security:
+   // ...
+       firewalls:
+   // ...
+         main:
+   // ...
+            remember_me:
+   // ...
+               #always_remember_me: true
+   // ...
+               signature_properties: [password]
+   ```
+
+Me explico. Cuando Symfony crea la cookie remember me, crea una "firma" que demuestra que esta cookie es válida. Gracias a esta configuración, ahora obtendrá la propiedad `password` de nuestro **Profesional** y la incluirá en la firma. Luego, cuando esa cookie se utilice para autenticarse, Symfony volverá a crear la firma utilizando el password del Profesional que está actualmente en la base de datos y se asegurará de que las dos firmas coincidan. Así que si el password de la base de datos es diferente a la contraseña que se utilizó para crear originalmente la cookie... ¡la coincidencia de la firma fallará!
+
+En otras palabras, para cualquier propiedad de esta lista, si incluso una de estas cambia en la base de datos en ese Profesional, todas las cookies "recuérdame" para ese usuario serán invalidadas instantáneamente.
+
+Así que si un usuario malo me roba la cuenta, todo lo que tengo que hacer es cambiar mi contraseña y ese usuario malo será expulsado.
+
+Esto es superguay verlo en acción. Actualiza la página. Si modificas la configuración de `signature_properties`, se invalidarán todas las cookies de REMEMBERME en todo el sistema: así que asegúrate de que la configuración es correcta cuando lo configures por primera vez. Observa: si borro la cookie de sesión y actualizo..., ¡sí! No estoy autentificado: la cookie de REMEMBERME no ha funcionado. Sigue ahí..., pero no es funcional.
+
+Iniciemos la sesión - con nuestro NIF normal..., y la contraseña..., para que obtengamos una nueva cookie remember me que se crea con la contraseña con hash.
+
+¡Genial! Y ahora, en condiciones normales, las cosas funcionarán como siempre. Puedo borrar la cookie de sesión, actualizarla y seguiré conectado.
+
+Pero ahora, vamos a cambiar la contraseña del usuario en la base de datos. Podemos hacer trampa y hacer esto en la línea de comandos:
+
+`symfony console doctrine:query:sql "UPDATE profesional SET password='foo' WHERE nif='12345678Z'"`
+
+Poner la contraseña en `foo` es una auténtica tontería..., ya que esta columna debe contener una contraseña con hash..., pero estará bien para nuestros propósitos. Pulsa y..., ¡fantástico! Esto imita lo que ocurriría si cambiara la contraseña de mi cuenta.
+
+Ahora, si somos el usuario malo, la próxima vez que volvamos al sitio..., ¡de repente habremos cerrado la sesión! ¡Una barbaridad! ¡Y yo también me habría salido con la mía si no fuera por vosotros, niños entrometidos! La cookie "recuérdame" está ahí..., pero no funciona. Me encanta esta función.
+
+A continuación: ¡es hora de tener un viaje de poder y empezar a negar el acceso! Veamos `access_control`: la forma más sencilla de bloquear el acceso a secciones enteras de tu sitio.
+
+## 16. Denegación de acceso, access_control y roles
+
+Ya hemos hablado mucho de la autenticación: el proceso de inicio de sesión. Y..., incluso ya hemos iniciado la sesión. Así que vamos a echar nuestro primer vistazo a la **autorización**, que es la parte divertida en la que podemos ir de un lado a otro y denegar el acceso a diferentes partes de nuestro sitio.
+
+### Hola control_de_acceso
+
+La forma más fácil de expulsar a alguien de tu fiesta es en realidad dentro de `config/packages/security.yaml`. Es a través de `access_control`:
+
+```yaml
+security:
+// ...
+   # Una forma sencilla de controlar el acceso a grandes secciones de su sitio
+   # Nota: Solo se utilizará el *primer* control de acceso que coincida
+   access_control:
+      # - { path: ^/admin, roles: ROLE_ADMIN }
+      # - { path: ^/profile, roles: ROLE_USER }
+```
+
+Descomenta la primera entrada.
+
+El `path` es una expresión regular. Así que esto dice básicamente
+
+Si una URL empieza por `/admin` -por tanto, `/admin` o `/admin*` -, entonces **denegaré** el acceso a menos que el usuario tenga `ROLE_ADMIN`.
+
+Hablaremos más sobre los roles en un minuto..., pero puedo decirte que nuestro usuario no tiene ese rol. Así que..., vamos a intentar ir a una URL que coincida con esta ruta. En realidad tenemos una pequeña sección de administración en nuestro sitio. Asegúrate de que estás conectado..., y luego ve a `/admin`. ¡Acceso denegado! Se nos expulsa con un **error 403**.
+
+En producción, puedes personalizar el aspecto de esta página de error 403..., además de personalizar la página de error 404 o 422.
+
+### ¡Roles! Usuario::getRoles()
+
+Hablemos de estos "**roles**". Abre la clase `Profesional:src/Entity/Profesional.php`. Así es como funciona. En el momento en que nos conectamos, Symfony llama a este método `getRoles()`, que forma parte de `UserInterface`.
+
+Devolvemos un array con los roles que debe tener este usuario. El comando `make:user` generó esto para que siempre tengamos un rol llamado `ROLE_USER`..., más cualquier rol extra almacenado en la propiedad `$this->roles`. Esa propiedad contiene una matriz de cadenas..., que se almacenan en la base de datos como **JSON** (o no):
+
+```php
+/**
+ * @var list<string> Los roles de usuario
+   */
+#[ORM\Column]
+private array $roles = [];
+```
+
+Esto significa que podemos dar a cada usuario tantos roles como queramos. Hasta ahora, cuando hemos creado nuestros usuarios, no les hemos dado ningún rol..., por lo que nuestra propiedad roles está vacía. Pero gracias a cómo está escrito el método `getRoles()`, cada usuario tiene al menos `ROLE_USER`. El comando `make:user` generó el código así porque **todos los usuarios necesitan tener al menos un rol**..., de lo contrario vagan por nuestro sitio como usuarios zombis medio muertos. No es..., bonito.
+
+Así que, por convención, siempre damos a un usuario al menos `ROLE_USER`. Ah, y la única regla sobre los roles -eso es un trabalenguas- es que deben empezar por `ROLE_`. Más adelante en el tutorial, aprenderemos por qué.
+
+En cualquier caso, en el momento en que nos conectamos, Symfony llama a `getRoles()`, nos devuelve el array de roles, y los almacena. De hecho, podemos ver esto si hacemos clic en el icono de seguridad de la barra de herramientas de depuración de la web. ¡Sí! Roles: `ROLE_USER`.
+
+Entonces, cuando vamos a `/admin`, esto coincide con nuestra primera entrada `access_control`, comprueba si tenemos `ROLE_ADMIN`, no lo tenemos, y deniega el acceso.
+
+### Sólo coincide UN control_de_acceso
+
+Ah, pero hay un detalle importante que hay que saber sobre `access_control`: sólo se encontrará una coincidencia en una petición.
+
+Por ejemplo, supón que tienes dos controles de acceso como éste:
+
+```yaml
+security:
+    # ...
+    access_control:
+      - { path: ^/admin, roles: ROLE_ADMIN }
+      - { path: ^/admin/foo, roles: ROLE_USER }
+```
+
+Si fuéramos a `/admin`, eso **coincidiría con la primera regla y sólo utilizaría la primera regla**. Funciona como el enrutamiento: recorre la lista de control de acceso de uno en uno y, en cuanto encuentra la primera coincidencia, se detiene y utiliza sólo esa entrada.
+
+Esto nos ayudará más adelante, cuando neguemos el acceso a toda una sección excepto a una URL. Pero por ahora, ¡sólo tenlo en cuenta!
+
+Y..., eso es todo. Los controles de acceso nos proporcionan una forma realmente sencilla de asegurar secciones enteras de nuestro sitio. Pero es sólo una forma de denegar el acceso. Pronto hablaremos de cómo podemos denegar el acceso controlador por controlador, algo que me gusta mucho.
+
+Pero antes de hacerlo, sé que si intento acceder a esta página sin `ROLE_ADMIN`, obtengo el error 403 prohibido. ¿Pero qué pasa si intento acceder a esta página como usuario anónimo? Ve a `/logout`. Ahora no estamos conectados.
+
+Vuelve a `/admin` y..., ¡whoa! ¡Un error!
+
+Se requiere una autentificación completa para acceder a este recurso.
+
+A continuación, vamos a hablar del "punto de entrada" de tu cortafuegos: la forma en que ayudas a los usuarios anónimos a iniciar el proceso de acceso.
+
+## 17. El punto de entrada: invitar a los usuarios a conectarse
+
+Vuelve a entrar utilizando 12345678Z y la contraseña Aa_123456. Cuando vamos a `/admin`, como hemos visto antes, obtenemos "Acceso denegado". Esto se debe a `access_control`..., y al hecho de que nuestro usuario no tiene `ROLE_ADMIN`.
+
+Pero si lo cambiamos por `ROLE_USER` -un rol que sí tenemos-, el acceso está garantizado.
+
+Y conseguimos ver unos gráficos impresionantes.
+
+Probemos una cosa más. Cerremos la sesión, es decir, vayamos manualmente a `/logout`. Ahora que no hemos iniciado la sesión, si vamos directamente a `/admin`: ¿qué debería ocurrir?
+
+Bueno, en este momento, obtenemos una gran página de error con un código de estado 401. Pero..., ¡eso no es lo que queremos! Si un usuario anónimo intenta acceder a una página protegida de nuestro sitio, en lugar de un error, queremos ser súper amables e invitarle a iniciar la sesión. Como tenemos un formulario de entrada, significa que queremos redirigir al usuario a la página de entrada.
+
+### ¡Hola punto de entrada!
+
+Para saber qué hacer cuando un usuario anónimo accede a una página protegida, cada cortafuegos define algo llamado "punto de entrada". El punto de entrada de un cortafuegos es literalmente una función que dice:
+
+> ¡Esto es lo que debemos hacer cuando un usuario anónimo intenta acceder a una página protegida!
+
+Cada autentificador de nuestro cortafuegos puede o no "proporcionar" un punto de entrada. Ahora mismo, tenemos dos autentificadores: nuestro `LoginFormAuthenticator` personalizado y también el autentificador `remember_me`.
+
+Pero ninguno de ellos proporciona un punto de entrada, por lo que, en lugar de redirigir al usuario a una página..., o algo diferente, obtenemos este error genérico 401. Algunos autenticadores incorporados -como `form_login`, del que hablaremos pronto- sí proporcionan un punto de entrada..., y lo veremos.
+
+### Hacer de nuestro autentificador un punto de entrada
+
+Pero, de todos modos, ninguno de nuestros autenticadores proporciona un punto de entrada..., ¡así que vamos a añadir uno!
+
+Abre nuestro autentificador: `src/Security/LoginFormAuthenticator.php`. Si quieres que tu autentificador proporcione un punto de entrada, todo lo que tienes que hacer es implementar una nueva interfaz: `AuthenticationEntryPointInterface`:
+
+```php
+use Symfony\Component\Security\Http\EntryPoint\AuthenticationEntryPointInterface;
+
+class LoginFormAuthenticator extends AbstractAuthenticator implements AuthenticationEntryPointInterface
+{
+// ...
+}
+```
+
+Esto requiere que la clase tenga un nuevo método..., que en realidad ya tenemos aquí abajo. Se llama `start()`. Descomenta el método. Luego, dentro, muy simplemente, vamos a redirigir a la página de inicio de sesión. Voy a robar el código de arriba:
+
+```php
+use Symfony\Component\Security\Http\EntryPoint\AuthenticationEntryPointInterface;
+
+class LoginFormAuthenticator extends AbstractAuthenticator implements AuthenticationEntryPointInterface
+{
+   public function start(Request $request, AuthenticationException $authException = null): Response
+   {
+        /*
+         * If you would like this class to control what happens when an anonymous user accesses a
+         * protected page (e.g. redirect to /login), uncomment this method and make this class
+         * implement Symfony\Component\Security\Http\EntryPoint\AuthenticationEntryPointInterface.
+         *
+         * For more details, see https://symfony.com/doc/current/security/experimental_authenticators.html#configuring-the-authentication-entry-point
+         */
+   }
+}
+```
